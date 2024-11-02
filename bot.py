@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultPhoto, Update
 from telegram.ext import Application, CommandHandler, InlineQueryHandler, ContextTypes, CallbackQueryHandler
 from uuid import uuid4
-from flask import Flask
+from flask import Flask, jsonify
 import threading
 
 # .env ফাইল লোড করা হচ্ছে
@@ -134,18 +134,18 @@ def index():
 
 @app.route('/health')
 def health():
-    return "✅ Bot health check successful!"
+    return jsonify(status="running", health_check="success")
 
 @app.route('/status')
 def status():
-    return {
-        "status": "running",
-        "features": ["Genre-based search", "Trending movies", "Tags display", "Release year filter"]
-    }
+    return jsonify(
+        status="running",
+        features=["Genre-based search", "Trending movies", "Tags display", "Release year filter"]
+    )
 
 # Flask এবং Telegram bot একসাথে চালানো হচ্ছে
 def run_flask():
-    app.run(port=5000)
+    app.run(host="0.0.0.0", port=5000)  # TCP Health check জন্য host 0.0.0.0 ব্যবহার করা হচ্ছে
 
 def run_bot():
     telegram_app.run_polling()
