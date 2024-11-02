@@ -1,11 +1,11 @@
 import os
+import random
 from dotenv import load_dotenv
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultPhoto, Update, ParseMode
-from telegram.ext import Application, CommandHandler, InlineQueryHandler, ContextTypes, CallbackQueryHandler
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultPhoto, Update
+from telegram.ext import Application, CommandHandler, InlineQueryHandler, CallbackQueryHandler, ContextTypes
 from uuid import uuid4
 from flask import Flask, jsonify
 import threading
-import random
 
 # Load environment variables
 load_dotenv()
@@ -18,15 +18,15 @@ app = Flask(__name__)
 # Initialize Telegram bot application
 telegram_app = Application.builder().token(BOT_TOKEN).build()
 
-# 🎬 Sample movie database with varied genres and attributes
+# 🎬 Extended Movie Database with multiple tags and attributes
 MOVIE_DATABASE = [
     {
         "title": "Kalki 2024",
         "poster_url": "https://example.com/kalki_2024.jpg",
-        "description": "Kalki 2024 একটি অ্যাকশনধর্মী সিনেমা।",
+        "description": "An action-packed journey of a mythical hero.",
         "rating": "⭐ 8.3",
         "genre": ["Action", "Adventure"],
-        "tags": ["#Action", "#Adventure", "#Blockbuster"],
+        "tags": ["#Action", "#Adventure", "#Blockbuster", "#Mythical"],
         "release_year": 2024,
         "source": "Netflix",
         "trending": True,
@@ -36,117 +36,142 @@ MOVIE_DATABASE = [
         "year_best": 2024,
         "trailer_link": "https://www.youtube.com/results?search_query=Kalki+2024+trailer"
     },
-    # Add more movies here...
+    # Add additional movies with different tags, genres, and sources...
 ]
 
-# Data structures for user data
-user_profiles = {}
+# User data dictionaries
+user_preferences = {}
+user_feedback = {}
+user_watch_history = {}
 user_favorites = {}
-user_watchlists = {}
-user_ratings = {}
 
-# Helper function to fetch movies
-async def fetch_movie_info(movie_name=None, genre=None, trending=False, new_release=False, top_rated=False, year_best=None, comedy=False):
+# 🎬 Function to fetch movie information with filters
+async def fetch_movies(name=None, genre=None, trending=False, new_release=False, top_rated=False, year=None, rating=None, source=None, tags=None):
     results = []
     for movie in MOVIE_DATABASE:
         if (
-            (movie_name and movie_name.lower() in movie["title"].lower()) or
+            (name and name.lower() in movie["title"].lower()) or
             (genre and genre in movie["genre"]) or
             (trending and movie["trending"]) or
             (new_release and movie["new_release"]) or
             (top_rated and movie.get("top_rated")) or
-            (year_best and movie.get("year_best") == year_best) or
-            (comedy and movie.get("comedy"))
+            (year and movie["release_year"] == year) or
+            (rating and float(movie["rating"].split(" ")[1]) >= rating) or
+            (source and movie["source"].lower() == source.lower()) or
+            (tags and any(tag in movie["tags"] for tag in tags))
         ):
             results.append(movie)
     return results
 
-# Command to set up user profile
-async def setup_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    genre = " ".join(context.args).title()
-    
-    if genre not in [g for m in MOVIE_DATABASE for g in m["genre"]]:
-        await update.message.reply_text("Invalid genre. Try: Action, Adventure, Comedy, etc.")
-        return
-    
-    user_profiles[user_id] = genre
-    await update.message.reply_text(f"Profile set! Your preferred genre is {genre}. You’ll receive recommendations accordingly.")
+# 🎬 Log user's watch history
+async def log_watch_history(user_id, movie_title):
+    if user_id not in user_watch_history:
+        user_watch_history[user_id] = []
+    user_watch_history[user_id].append(movie_title)
 
-# Command to get personalized recommendations
-async def recommend_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    preferred_genre = user_profiles.get(user_id)
-    
-    if not preferred_genre:
-        await update.message.reply_text("You don't have a profile yet. Use /setup_profile <genre> to set it up.")
-        return
-    
-    recommendations = await fetch_movie_info(genre=preferred_genre)
-    
-    if not recommendations:
-        await update.message.reply_text("No recommendations available at the moment.")
-    else:
-        movie = random.choice(recommendations)
-        await update.message.reply_text(f"🎬 *{movie['title']}*\n📖 {movie['description']}\n⭐ {movie['rating']}\n📅 {movie['release_year']}\n")
-
-# Command to add movie to favorites
-async def add_favorite(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    movie_name = " ".join(context.args)
-    
-    if movie_name not in [m["title"] for m in MOVIE_DATABASE]:
-        await update.message.reply_text("Movie not found.")
-        return
-    
-    user_favorites.setdefault(user_id, []).append(movie_name)
-    await update.message.reply_text(f"{movie_name} added to favorites!")
-
-# Command to rate a movie
-async def rate_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    try:
-        movie_name, rating = " ".join(context.args[:-1]), int(context.args[-1])
-        if rating < 1 or rating > 10:
-            raise ValueError
-    except (ValueError, IndexError):
-        await update.message.reply_text("Usage: /rate_movie <movie name> <rating (1-10)>")
-        return
-    
-    user_ratings.setdefault(user_id, {})[movie_name] = rating
-    await update.message.reply_text(f"Thank you! You rated {movie_name} as {rating}/10.")
-
-# Start command with extended instructions
+# 🎬 Command to start with enhanced message and instructions
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🎬 *Welcome to the Enhanced Movie Bot!* 🎬\n"
-        "Here’s everything you can do:\n\n"
-        "📝 *Commands:*\n"
-        "/start - Display this message\n"
-        "/setup_profile <genre> - Set up your preferred genre\n"
-        "/recommend_movie - Get a movie recommendation based on your profile\n"
-        "/add_favorite <movie name> - Add a movie to your favorites\n"
-        "/view_favorites - View your list of favorite movies\n"
-        "/rate_movie <movie name> <rating (1-10)> - Rate a movie\n"
-        "/get_feedback - Provide feedback about the bot\n\n"
-        "🌟 *Inline Commands:*\n"
-        "- Type 'trending' to see trending movies\n"
-        "- Type 'new' to view new releases\n"
-        "- Search by typing a movie name\n"
-        "- Use 'genre:<genre>' to filter by genre (e.g., 'genre:Comedy')\n"
-        "- Find top movies of a specific year by typing 'best of <year>'\n\n"
-        "Enjoy exploring! 🎬🍿"
+        "🎬 *Welcome to MovieBot!* 🎬\n\n"
+        "Here are some commands you can use:\n"
+        "/start - Show this message\n"
+        "/set_preferences <genres/tags> - Set preferences (e.g., Action, #Mythical)\n"
+        "/recommend_random - Get a random movie\n"
+        "/top_movies_of_year <year> - Show top movies of a year\n"
+        "/watch_history - See your watch history\n"
+        "/feedback <text> - Provide feedback\n"
+        "/favorites - View your favorite movies\n\n"
+        "*Inline Commands:*\n"
+        "- Type 'trending' for trending movies\n"
+        "- Use 'genre:<genre>' for specific genres\n"
+        "- Use 'tag:<tag>' for specific tags\n"
     )
 
-# Inline query handler
+# 🎬 Inline Query Handler with added tag support
 async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # (Same as previous code, handles various inline queries)
-    pass
+    query = update.inline_query.query.strip().lower()
+    if not query:
+        return
 
-# Flask and Telegram app initialization
+    # Process different query types
+    if query == "new":
+        movies = await fetch_movies(new_release=True)
+    elif query == "trending":
+        movies = await fetch_movies(trending=True)
+    elif query.startswith("genre:"):
+        genre = query.split(":", 1)[1].strip()
+        movies = await fetch_movies(genre=genre)
+    elif query.startswith("source:"):
+        source = query.split(":", 1)[1].strip()
+        movies = await fetch_movies(source=source)
+    elif query.startswith("tag:"):
+        tag = query.split(":", 1)[1].strip()
+        movies = await fetch_movies(tags=[f"#{tag}"])
+    else:
+        movies = await fetch_movies(name=query)
+
+    results = [
+        InlineQueryResultPhoto(
+            id=str(uuid4()),
+            title=movie['title'],
+            photo_url=movie['poster_url'],
+            thumb_url=movie['poster_url'],
+            caption=(
+                f"🎬 *{movie['title']}*\n"
+                f"⭐ *Rating:* {movie['rating']}\n"
+                f"🎭 *Genre:* {', '.join(movie['genre'])}\n"
+                f"📅 *Release Year:* {movie['release_year']}\n"
+                f"🏷 *Tags:* {', '.join(movie['tags'])}\n"
+                f"{movie['description']}\n"
+            ),
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("▶️ Watch Trailer", url=movie["trailer_link"])],
+                [InlineKeyboardButton("❤️ Add to Favorites", callback_data=f"fav|{movie['title']}")]
+            ])
+        ) for movie in movies
+    ]
+    await update.inline_query.answer(results, cache_time=10)
+
+# 🎬 Command to set user preferences
+async def set_preferences(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    preferences = " ".join(context.args).title()
+    user_preferences[user_id] = preferences
+    await update.message.reply_text(f"Preferences saved! Your preferences are: {preferences}.")
+
+# 🎬 Command to view favorites
+async def favorites(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    favorites = user_favorites.get(user_id, [])
+    if favorites:
+        await update.message.reply_text("Your favorite movies:\n" + "\n".join(favorites))
+    else:
+        await update.message.reply_text("No favorites yet.")
+
+# 🎬 Command for watch history
+async def watch_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    history = user_watch_history.get(user_id, [])
+    if history:
+        await update.message.reply_text("Your watch history:\n" + "\n".join(history))
+    else:
+        await update.message.reply_text("You have no watch history.")
+
+# 🎬 Command for feedback
+async def feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    feedback_text = " ".join(context.args)
+    if feedback_text:
+        user_feedback[user_id] = feedback_text
+        await update.message.reply_text("Thanks for your feedback!")
+    else:
+        await update.message.reply_text("Please add feedback text after the command.")
+
+# Flask and Telegram bot initialization
 @app.route('/')
 def index():
-    return "🤖 Enhanced Bot is running!"
+    return "🤖 MovieBot is running!"
 
 @app.route('/health')
 def health():
