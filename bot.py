@@ -29,6 +29,7 @@ async def fetch_movie_info(movie_name):
             "genre": ["Action", "Adventure"],
             "tags": ["#Action", "#Drama", "#Epic", "#Adventure"],
             "release_year": 2024,
+            "source": "Netflix",
             "trending": True,
             "trailer_link": f"https://www.youtube.com/results?search_query={movie_name}+2024+trailer"
         },
@@ -40,6 +41,7 @@ async def fetch_movie_info(movie_name):
             "genre": ["Drama"],
             "tags": ["#Drama", "#Classic", "#Historical"],
             "release_year": 2019,
+            "source": "Amazon Prime",
             "trending": False,
             "trailer_link": f"https://www.youtube.com/results?search_query={movie_name}+2019+trailer"
         }
@@ -51,14 +53,15 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not query:
         return
 
-    # 🎬 সিনেমার তালিকা সংগ্রহ করা 🎬
+    # 🎬 সিনেমার তালিকা সংগ্রহ 🎬
     movies = await fetch_movie_info(query)
     results = []
     for movie in movies:
         title_with_year = f"{movie['title']}"
-        trending_tag = "🔥 Trending" if movie.get("trending") else "✨ Popular"
+        trending_tag = "🔥 #Trending" if movie.get("trending") else "✨ #Popular"
+        source_tag = f"📺 Source: {movie['source']}"
 
-        # ইনলাইন রেসাল্ট বানানো
+        # ইনলাইন রেসাল্ট তৈরি
         results.append(
             InlineQueryResultPhoto(
                 id=str(uuid4()),
@@ -71,6 +74,8 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"⭐ *Rating:* {movie['rating']}\n"
                     f"🎭 *Genre:* {', '.join(movie['genre'])}\n"
                     f"🏷 *Tags:* {', '.join(movie['tags'])}\n"
+                    f"📅 *Release Year:* {movie['release_year']}\n"
+                    f"{source_tag}\n"
                     f"📖 *Description:* {movie['description']}\n"
                 ),
                 parse_mode="Markdown",
@@ -93,13 +98,15 @@ async def post_to_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer("⚠️ Movie information not found.")
         return
 
-    # ✨ মুভির তথ্য পাঠানোর জন্য বার্তা গঠন করা ✨
+    # মুভির তথ্য বার্তা তৈরি
     tags = ", ".join(movie_info["tags"])
     message = f"""
 🎬 *Title:* {movie_info['title']}
 ⭐ *Rating:* {movie_info['rating']}
 🎭 *Genre:* {', '.join(movie_info['genre'])}
 🏷 *Tags:* {tags}
+📅 *Release Year:* {movie_info['release_year']}
+📺 *Source:* {movie_info['source']}
 📖 *Description:* {movie_info['description']}
     """
 
@@ -140,12 +147,15 @@ def health():
 def status():
     return jsonify(
         status="running",
-        features=["Genre-based search", "Trending movies", "Tags display", "Release year filter"]
+        features=[
+            "Genre-based search", "Trending movies", "Tags display",
+            "Release year filter", "Source display"
+        ]
     )
 
 # Flask এবং Telegram bot একসাথে চালানো হচ্ছে
 def run_flask():
-    app.run(host="0.0.0.0", port=5000)  # TCP Health check জন্য host 0.0.0.0 ব্যবহার করা হচ্ছে
+    app.run(host="0.0.0.0", port=8000)  # TCP Health check জন্য host 0.0.0.0 ব্যবহার করা হচ্ছে
 
 def run_bot():
     telegram_app.run_polling()
