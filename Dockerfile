@@ -1,17 +1,16 @@
-# Python image ব্যবহার করা হচ্ছে
-FROM python:3.10-slim
+# Use official Python image
+FROM python:3.9-slim
 
-# কাজের ডিরেক্টরি সেট করা হচ্ছে
+# Set work directory
 WORKDIR /app
 
-# প্রয়োজনীয় ফাইল কপি করা হচ্ছে
-COPY . .
-
-# প্যাকেজ ইনস্টল করা হচ্ছে
+# Install dependencies
+COPY requirements.txt .
 RUN pip install -r requirements.txt
 
-# পরিবেশ ভেরিয়েবল সেট করা হচ্ছে
-ENV PORT=5000
+# Copy project files
+COPY . .
 
-# কন্টেইনার রান করা হচ্ছে
-CMD ["python", "bot.py"]
+# Expose port and run the app
+EXPOSE 8000
+CMD ["python", "main.py"]
