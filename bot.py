@@ -17,7 +17,7 @@ app = Flask(__name__)
 # Telegram bot application তৈরি করা হচ্ছে
 telegram_app = Application.builder().token(BOT_TOKEN).build()
 
-# 🎬 মুভি ডাটাবেস (ডেমো হিসেবে) 🎬
+# 🎬 মুভি ডাটাবেস 🎬 (নতুন ফিচার ও ক্যাটাগরি সহ)
 MOVIE_DATABASE = [
     {
         "title": "Kalki 2024",
@@ -30,46 +30,26 @@ MOVIE_DATABASE = [
         "source": "Netflix",
         "trending": True,
         "new_release": True,
+        "top_rated": True,
+        "comedy": False,
+        "year_best": 2024,
         "trailer_link": "https://www.youtube.com/results?search_query=Kalki+2024+trailer"
     },
-    {
-        "title": "Inception",
-        "poster_url": "https://example.com/inception.jpg",
-        "description": "Inception একটি সাই-ফাই অ্যাকশনধর্মী সিনেমা।",
-        "rating": "⭐ 8.8",
-        "genre": ["Sci-Fi", "Thriller"],
-        "tags": ["#SciFi", "#MindBending", "#Thriller"],
-        "release_year": 2010,
-        "source": "Amazon Prime",
-        "trending": False,
-        "new_release": False,
-        "trailer_link": "https://www.youtube.com/results?search_query=Inception+trailer"
-    },
-    {
-        "title": "Avatar 2022",
-        "poster_url": "https://example.com/avatar_2022.jpg",
-        "description": "Avatar 2022 একটি বিখ্যাত ফ্যান্টাসি সিনেমা।",
-        "rating": "⭐ 7.5",
-        "genre": ["Fantasy", "Adventure"],
-        "tags": ["#Fantasy", "#Adventure", "#Epic"],
-        "release_year": 2022,
-        "source": "Disney+",
-        "trending": True,
-        "new_release": True,
-        "trailer_link": "https://www.youtube.com/results?search_query=Avatar+2022+trailer"
-    }
     # আরও মুভি যোগ করা যেতে পারে...
 ]
 
-# 🎬 সিনেমার তথ্য সংগ্রহের জন্য ফাংশন 🎬
-async def fetch_movie_info(movie_name=None, genre=None, trending=False, new_release=False):
+# 🎬 সিনেমা অনুসন্ধানের জন্য ফাংশন 🎬
+async def fetch_movie_info(movie_name=None, genre=None, trending=False, new_release=False, top_rated=False, year_best=None, comedy=False):
     results = []
     for movie in MOVIE_DATABASE:
         if (
             (movie_name and movie_name.lower() in movie["title"].lower()) or
             (genre and genre in movie["genre"]) or
             (trending and movie["trending"]) or
-            (new_release and movie["new_release"])
+            (new_release and movie["new_release"]) or
+            (top_rated and movie.get("top_rated")) or
+            (year_best and movie.get("year_best") == year_best) or
+            (comedy and movie.get("comedy"))
         ):
             results.append(movie)
     return results
@@ -85,6 +65,13 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         movies = await fetch_movie_info(new_release=True)
     elif query == "trending":
         movies = await fetch_movie_info(trending=True)
+    elif query == "top rated":
+        movies = await fetch_movie_info(top_rated=True)
+    elif query == "comedy":
+        movies = await fetch_movie_info(comedy=True)
+    elif query.startswith("best of"):
+        year = int(query.split(" ")[-1])
+        movies = await fetch_movie_info(year_best=year)
     elif query.startswith("genre:"):
         genre = query.split(":", 1)[1].strip()
         movies = await fetch_movie_info(genre=genre)
@@ -166,7 +153,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "👉 সাধারণ খোঁজ: মুভির নাম টাইপ করুন\n"
         "👉 নতুন মুভি: 'new' টাইপ করুন\n"
         "👉 ট্রেন্ডিং মুভি: 'trending' টাইপ করুন\n"
-        "👉 জনর অনুসারে খোঁজ: 'genre:genre_name' টাইপ করুন (যেমন - genre:Action)"
+        "👉 জনর অনুসারে খোঁজ: 'genre:genre_name' টাইপ করুন (যেমন - genre:Action)\n"
+        "👉 সেরা মুভি (বছর অনুযায়ী): 'best of 2023'\n"
+        "👉 জনপ্রিয় কমেডি: 'comedy'\n"
+        "👉 শীর্ষ রেটিং: 'top rated'"
     )
 
 # 📲 বট হ্যান্ডলার যোগ করা 📲
