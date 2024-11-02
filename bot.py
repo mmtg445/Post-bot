@@ -6,7 +6,7 @@ from uuid import uuid4
 from flask import Flask, jsonify
 import threading
 
-# .env ফাইল লোড করা হচ্ছে
+# .env ফাইল থেকে তথ্য লোড করা হচ্ছে
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 DEFAULT_CHANNEL_ID = os.getenv("DEFAULT_CHANNEL_ID")
@@ -17,44 +17,80 @@ app = Flask(__name__)
 # Telegram bot application তৈরি করা হচ্ছে
 telegram_app = Application.builder().token(BOT_TOKEN).build()
 
-# 🎥 সিনেমার তথ্য সংগ্রহের জন্য ফাংশন 🎥
-async def fetch_movie_info(movie_name):
-    # উদাহরণ হিসেবে সিনেমার তথ্য প্রদান
-    return [
-        {
-            "title": f"{movie_name} 2024",
-            "poster_url": "https://example.com/kalki_2024.jpg",
-            "description": f"{movie_name} 2024 একটি জনপ্রিয় সিনেমা।",
-            "rating": "⭐ 8.3",
-            "genre": ["Action", "Adventure"],
-            "tags": ["#Action", "#Drama", "#Epic", "#Adventure"],
-            "release_year": 2024,
-            "source": "Netflix",
-            "trending": True,
-            "trailer_link": f"https://www.youtube.com/results?search_query={movie_name}+2024+trailer"
-        },
-        {
-            "title": f"{movie_name} 2019",
-            "poster_url": "https://example.com/kalki_2019.jpg",
-            "description": f"{movie_name} 2019 একটি জনপ্রিয় সিনেমা।",
-            "rating": "⭐ 7.8",
-            "genre": ["Drama"],
-            "tags": ["#Drama", "#Classic", "#Historical"],
-            "release_year": 2019,
-            "source": "Amazon Prime",
-            "trending": False,
-            "trailer_link": f"https://www.youtube.com/results?search_query={movie_name}+2019+trailer"
-        }
-    ]
+# 🎬 মুভি ডাটাবেস (ডেমো হিসেবে) 🎬
+MOVIE_DATABASE = [
+    {
+        "title": "Kalki 2024",
+        "poster_url": "https://example.com/kalki_2024.jpg",
+        "description": "Kalki 2024 একটি অ্যাকশনধর্মী সিনেমা।",
+        "rating": "⭐ 8.3",
+        "genre": ["Action", "Adventure"],
+        "tags": ["#Action", "#Adventure", "#Blockbuster"],
+        "release_year": 2024,
+        "source": "Netflix",
+        "trending": True,
+        "new_release": True,
+        "trailer_link": "https://www.youtube.com/results?search_query=Kalki+2024+trailer"
+    },
+    {
+        "title": "Inception",
+        "poster_url": "https://example.com/inception.jpg",
+        "description": "Inception একটি সাই-ফাই অ্যাকশনধর্মী সিনেমা।",
+        "rating": "⭐ 8.8",
+        "genre": ["Sci-Fi", "Thriller"],
+        "tags": ["#SciFi", "#MindBending", "#Thriller"],
+        "release_year": 2010,
+        "source": "Amazon Prime",
+        "trending": False,
+        "new_release": False,
+        "trailer_link": "https://www.youtube.com/results?search_query=Inception+trailer"
+    },
+    {
+        "title": "Avatar 2022",
+        "poster_url": "https://example.com/avatar_2022.jpg",
+        "description": "Avatar 2022 একটি বিখ্যাত ফ্যান্টাসি সিনেমা।",
+        "rating": "⭐ 7.5",
+        "genre": ["Fantasy", "Adventure"],
+        "tags": ["#Fantasy", "#Adventure", "#Epic"],
+        "release_year": 2022,
+        "source": "Disney+",
+        "trending": True,
+        "new_release": True,
+        "trailer_link": "https://www.youtube.com/results?search_query=Avatar+2022+trailer"
+    }
+    # আরও মুভি যোগ করা যেতে পারে...
+]
+
+# 🎬 সিনেমার তথ্য সংগ্রহের জন্য ফাংশন 🎬
+async def fetch_movie_info(movie_name=None, genre=None, trending=False, new_release=False):
+    results = []
+    for movie in MOVIE_DATABASE:
+        if (
+            (movie_name and movie_name.lower() in movie["title"].lower()) or
+            (genre and genre in movie["genre"]) or
+            (trending and movie["trending"]) or
+            (new_release and movie["new_release"])
+        ):
+            results.append(movie)
+    return results
 
 # 🎬 ইনলাইন মোড হ্যান্ডলার 🎬
 async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.inline_query.query
+    query = update.inline_query.query.strip().lower()
     if not query:
         return
 
-    # 🎬 সিনেমার তালিকা সংগ্রহ 🎬
-    movies = await fetch_movie_info(query)
+    # 🎬 কিওয়ার্ড অনুযায়ী সিনেমা খোঁজা 🎬
+    if query == "new":
+        movies = await fetch_movie_info(new_release=True)
+    elif query == "trending":
+        movies = await fetch_movie_info(trending=True)
+    elif query.startswith("genre:"):
+        genre = query.split(":", 1)[1].strip()
+        movies = await fetch_movie_info(genre=genre)
+    else:
+        movies = await fetch_movie_info(movie_name=query)
+
     results = []
     for movie in movies:
         title_with_year = f"{movie['title']}"
@@ -85,7 +121,7 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ])
             )
         )
-    await update.inline_query.answer(results)
+    await update.inline_query.answer(results, cache_time=10)
 
 # 📢 চ্যানেলে পোস্ট করার কলব্যাক ফাংশন 📢
 async def post_to_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -93,7 +129,7 @@ async def post_to_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     movie_title = query.data.split('|')[1]
 
     # 🎥 নির্দিষ্ট সিনেমার তথ্য বের করা 🎥
-    movie_info = next((m for m in await fetch_movie_info(movie_title) if m["title"] == movie_title), None)
+    movie_info = next((m for m in MOVIE_DATABASE if m["title"] == movie_title), None)
     if not movie_info:
         await query.answer("⚠️ Movie information not found.")
         return
@@ -125,8 +161,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🎬 *কমান্ড সমূহ* 🎬\n"
         "/help - সাহায্য দেখুন\n"
-        "🎬 ইনলাইন মোডে সিনেমার তথ্য খুঁজুন (টেক্সট টাইপ করুন)\n\n"
-        "⚠️ উদাহরণ: সিনেমার নাম টাইপ করুন যেমন - Kalki"
+        "🎬 ইনলাইন মোডে সিনেমার তথ্য খুঁজুন:\n\n"
+        "কিওয়ার্ডের উদাহরণ:\n"
+        "👉 সাধারণ খোঁজ: মুভির নাম টাইপ করুন\n"
+        "👉 নতুন মুভি: 'new' টাইপ করুন\n"
+        "👉 ট্রেন্ডিং মুভি: 'trending' টাইপ করুন\n"
+        "👉 জনর অনুসারে খোঁজ: 'genre:genre_name' টাইপ করুন (যেমন - genre:Action)"
     )
 
 # 📲 বট হ্যান্ডলার যোগ করা 📲
@@ -142,16 +182,6 @@ def index():
 @app.route('/health')
 def health():
     return jsonify(status="running", health_check="success")
-
-@app.route('/status')
-def status():
-    return jsonify(
-        status="running",
-        features=[
-            "Genre-based search", "Trending movies", "Tags display",
-            "Release year filter", "Source display"
-        ]
-    )
 
 # Flask এবং Telegram bot একসাথে চালানো হচ্ছে
 def run_flask():
